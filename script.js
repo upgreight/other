@@ -13,137 +13,151 @@ const swiperAnimationConfig = {
   };
     
     
-  /******************************************************************************
-   * DATE PICKER & FORM SETUP
-   *****************************************************************************/
-  document.addEventListener('DOMContentLoaded', function() {
-    
-      function debounce(func, wait) {
-        let timeout;
-        return function() {
-          const context = this, args = arguments;
-          clearTimeout(timeout);
-          timeout = setTimeout(function() {
-            func.apply(context, args);
-          }, wait);
-        };
+/******************************************************************************
+* DATE PICKER & FORM SETUP
+*****************************************************************************/
+document.addEventListener('DOMContentLoaded', function() {
+  
+    function debounce(func, wait) {
+      let timeout;
+      return function() {
+        const context = this, args = arguments;
+        clearTimeout(timeout);
+        timeout = setTimeout(function() {
+          func.apply(context, args);
+        }, wait);
+      };
+    }
+  
+    (function customValidationSetup() {
+      const myForm = document.querySelector('form');
+      if (!myForm) return;
+      
+      function showElement(el, displayType = "block") {
+        el.style.display = displayType;
+        el.style.visibility = "visible";
       }
-    
-      (function customValidationSetup() {
-        const myForm = document.querySelector('form');
-        if (!myForm) return;
-        function showElement(el, displayType = "block") {
-          el.style.display = displayType;
-          el.style.visibility = "visible";
-        }
-        function hideElement(el) {
-          el.style.display = "none";
-          el.style.visibility = "hidden";
-        }
-        function validateRequiredFields(showErrors = false) {
-          let isFormValid = true;
-          let firstErrorElement = null;
-          document.querySelectorAll("[data-required]").forEach((requiredGroup) => {
-            const inputs = requiredGroup.querySelectorAll("input, select, textarea");
-            let isGroupValid = true;
-            inputs.forEach((input) => {
-              if (input.type === "checkbox" || input.type === "radio") {
-              } else {
-                if (input.value.trim() === "") {
-                  isGroupValid = false;
-                }
-              }
-            });
-            const checkable = Array.from(inputs).filter(input => input.type === "checkbox" || input.type === "radio");
-            if (checkable.length > 0) {
-              if (!checkable.some(input => input.checked)) {
+      function hideElement(el) {
+        el.style.display = "none";
+        el.style.visibility = "hidden";
+      }
+      function validateRequiredFields(showErrors = false) {
+        let isFormValid = true;
+        let firstErrorElement = null;
+        document.querySelectorAll("[data-required]").forEach((requiredGroup) => {
+          const inputs = requiredGroup.querySelectorAll("input, select, textarea");
+          let isGroupValid = true;
+          inputs.forEach((input) => {
+            if (input.type === "checkbox" || input.type === "radio") {
+            } else {
+              if (input.value.trim() === "") {
                 isGroupValid = false;
               }
             }
-            const errorElement = requiredGroup.querySelector('.form_error');
-            if (!isGroupValid) {
-              isFormValid = false;
-              if (showErrors && errorElement) {
-                showElement(errorElement, "block");
-                errorElement.setAttribute("aria-live", "polite");
-              }
-              if (!firstErrorElement) firstErrorElement = errorElement;
-            } else {
-              if (errorElement) {
-                hideElement(errorElement);
-                errorElement.removeAttribute("aria-live");
-              }
-            }
           });
-          return { isFormValid, firstErrorElement };
+          const checkable = Array.from(inputs).filter(input => input.type === "checkbox" || input.type === "radio");
+          if (checkable.length > 0) {
+            if (!checkable.some(input => input.checked)) {
+              isGroupValid = false;
+            }
+          }
+          const errorElement = requiredGroup.querySelector('.form_error');
+          if (!isGroupValid) {
+            isFormValid = false;
+            if (showErrors && errorElement) {
+              showElement(errorElement, "block");
+              errorElement.setAttribute("aria-live", "polite");
+            }
+            if (!firstErrorElement) firstErrorElement = errorElement;
+          } else {
+            if (errorElement) {
+              hideElement(errorElement);
+              errorElement.removeAttribute("aria-live");
+            }
+          }
+        });
+        return { isFormValid, firstErrorElement };
+      }
+
+      // URL aus Data-Attribut ziehen, Fail-Fast wenn fehlt
+      const taxiUrl = myForm.dataset.formTaxiUrl;
+      if (!taxiUrl) {
+        console.error('⚠️ data-form-taxi-url fehlt am <form>!');
+        const errorEl = document.createElement('div');
+        errorEl.className = 'form_error form-taxi-config-error';
+        errorEl.textContent =
+          'Dieses Formular ist nicht richtig konfiguriert. Bitte kontaktieren Sie den Betreiber.';
+        myForm.parentNode.insertBefore(errorEl, myForm);
+        myForm.style.display = 'none';
+        return;
+      }
+      myForm.action = taxiUrl;
+
+      const thankYouURL = window.location.origin + "/danke";
+      myForm.addEventListener("submit", function(e) {
+        e.preventDefault();
+        const { isFormValid, firstErrorElement } = validateRequiredFields(true);
+        if (!isFormValid) {
+          if (firstErrorElement) {
+            firstErrorElement.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+          return;
         }
-        myForm.action = "https://form.taxi/s/hao3m8ab";
-        const thankYouURL = window.location.origin + "/danke";
-        myForm.addEventListener("submit", function(e) {
-          e.preventDefault();
-          const { isFormValid, firstErrorElement } = validateRequiredFields(true);
-          if (!isFormValid) {
-            if (firstErrorElement) {
-              firstErrorElement.scrollIntoView({ behavior: "smooth", block: "center" });
-            }
-            return;
+        const submitButton = myForm.querySelector('button[type="submit"], #submit-button');
+        let originalText = "";
+        if (submitButton) {
+          originalText = submitButton.textContent;
+          submitButton.disabled = true;
+          submitButton.textContent = "Bitte warten...";
+        }
+        fetch(myForm.action, {
+          method: myForm.method || "POST",
+          body: new FormData(myForm),
+          headers: { "Accept": "application/json" }
+        })
+        .then(response => {
+          if (response.ok) {
+            window.location.href = thankYouURL;
+          } else {
+            throw new Error("Fehler beim Absenden des Formulars.");
           }
-          const submitButton = myForm.querySelector('button[type="submit"], #submit-button');
-          let originalText = "";
+        })
+        .catch(error => {
+          console.error(error);
+          const errorMessage = myForm.querySelector(".form_error-message");
+          if (errorMessage) {
+            showElement(errorMessage, "block");
+          }
           if (submitButton) {
-            originalText = submitButton.textContent;
-            submitButton.disabled = true;
-            submitButton.textContent = "Bitte warten...";
+            submitButton.disabled = false;
+            submitButton.textContent = originalText;
           }
-          fetch(myForm.action, {
-            method: myForm.method || "POST",
-            body: new FormData(myForm),
-            headers: { "Accept": "application/json" }
-          })
-          .then(response => {
-            if (response.ok) {
-              window.location.href = thankYouURL;
+        });
+      });
+      document.querySelectorAll("[data-required]").forEach((requiredGroup) => {
+        const inputs = requiredGroup.querySelectorAll("input, select, textarea");
+        inputs.forEach((input) => {
+          input.addEventListener("change", () => {
+            let isValidNow = true;
+            if (input.type === "checkbox" || input.type === "radio") {
+              const checkable = Array.from(requiredGroup.querySelectorAll("input[type='checkbox'], input[type='radio']"));
+              if (!checkable.some(inp => inp.checked)) {
+                isValidNow = false;
+              }
             } else {
-              throw new Error("Fehler beim Absenden des Formulars.");
+              if (input.value.trim() === "") {
+                isValidNow = false;
+              }
             }
-          })
-          .catch(error => {
-            console.error(error);
-            const errorMessage = myForm.querySelector(".form_error-message");
-            if (errorMessage) {
-              showElement(errorMessage, "block");
-            }
-            if (submitButton) {
-              submitButton.disabled = false;
-              submitButton.textContent = originalText;
+            if (isValidNow) {
+              const errorElement = requiredGroup.querySelector('.form_error');
+              if (errorElement) hideElement(errorElement);
             }
           });
         });
-        document.querySelectorAll("[data-required]").forEach((requiredGroup) => {
-          const inputs = requiredGroup.querySelectorAll("input, select, textarea");
-          inputs.forEach((input) => {
-            input.addEventListener("change", () => {
-              let isValidNow = true;
-              if (input.type === "checkbox" || input.type === "radio") {
-                const checkable = Array.from(requiredGroup.querySelectorAll("input[type='checkbox'], input[type='radio']"));
-                if (!checkable.some(inp => inp.checked)) {
-                  isValidNow = false;
-                }
-              } else {
-                if (input.value.trim() === "") {
-                  isValidNow = false;
-                }
-              }
-              if (isValidNow) {
-                const errorElement = requiredGroup.querySelector('.form_error');
-                if (errorElement) hideElement(errorElement);
-              }
-            });
-          });
-        });
-      })();
-    
-    });
+      });
+    })();
+});
     
     
   /******************************************************************************
